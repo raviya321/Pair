@@ -1,114 +1,76 @@
-const PastebinAPI = require('pastebin-js');
-const pastebin = new PastebinAPI('EMWTMkQAVfJa9kM-MRUrxd5Oku1U7pgL');
-const { makeid } = require('./id');
-const id = makeid();
-const fs = require('fs');
-const pino = require('pino');
-const { default: makeWASocket, Browsers, delay, useMultiFileAuthState, fetchLatestBaileysVersion, PHONENUMBER_MCC, makeCacheableSignalKeyStore } = require("@whiskeysockets/baileys");
-const NodeCache = require("node-cache");
-const chalk = require("chalk");
-const readline = require("readline");
-const { parsePhoneNumber } = require("libphonenumber-js");
-
-let phoneNumber = "923231371782";
-const pairingCode = !!phoneNumber || process.argv.includes("--pairing-code");
-const useMobile = process.argv.includes("--mobile");
-const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-const question = (text) => new Promise((resolve) => rl.question(text, resolve));
-
-async function qr() {
-    let { version, isLatest } = await fetchLatestBaileysVersion();
-    const { state, saveCreds } = await useMultiFileAuthState('./session/' + id);
-    const msgRetryCounterCache = new NodeCache();
-    const sock = makeWASocket({
-        logger: pino({ level: 'silent' }),
-        printQRInTerminal: !pairingCode,
-        browser: Browsers.windows('Firefox'),
-        auth: {
-            creds: state.creds,
-            keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }).child({ level: "fatal" })),
-        },
-        markOnlineOnConnect: true,
-        generateHighQualityLinkPreview: true,
-        msgRetryCounterCache,
-        defaultQueryTimeoutMs: undefined,
-    });
-
-    if (pairingCode && !sock.authState.creds.registered) {
-        if (useMobile) throw new Error('Cannot use pairing code with mobile API');
-
-        let phoneNumber;
-        if (!!phoneNumber) {
-            phoneNumber = phoneNumber.replace(/[^0-9]/g, '');
-            if (!Object.keys(PHONENUMBER_MCC).some(v => phoneNumber.startsWith(v))) {
-                console.log(chalk.bgBlack(chalk.redBright("Start with country code of your WhatsApp Number, Example : +923231371782")));
-                process.exit(0);
-            }
-        } else {
-            phoneNumber = await question(chalk.bgBlack(chalk.greenBright(`Please type your WhatsApp number 😍\nFor example: +923231371782 : `)));
-            phoneNumber = phoneNumber.replace(/[^0-9]/g, '');
-            if (!Object.keys(PHONENUMBER_MCC).some(v => phoneNumber.startsWith(v))) {
-                console.log(chalk.bgBlack(chalk.redBright("Start with country code of your WhatsApp Number, Example : +923231371782")));
-                phoneNumber = await question(chalk.bgBlack(chalk.greenBright(`Please type your WhatsApp number 😍\nFor example: +923231371782 : `)));
-                phoneNumber = phoneNumber.replace(/[^0-9]/g, '');
-                rl.close();
-            }
-        }
-
-        setTimeout(async () => {
-            let code = await sock.requestPairingCode(phoneNumber);
-            code = code?.match(/.{1,4}/g)?.join("-") || code;
-            console.log(chalk.black(chalk.bgGreen(`Your Pairing Code : `)), chalk.black(chalk.white(code)));
-        }, 3000);
-    }
-
-    sock.ev.on("connection.update", async (s) => {
-        const { connection, lastDisconnect } = s;
-        if (connection == "open") {
-            await delay(1000 * 10);
-            try {
-                // Upload session data to Pastebin and retrieve the unique identifier
-                const output = await pastebin.createPasteFromFile(__dirname + `/session/${id}/creds.json`, "Session ID", null, 1, "N");
-                
-                // Extract Pastebin ID from the URL (e.g., pastebin.com/XXXX)
-                const pastebinId = output.split('/').pop();
-                
-                // Format session ID with "RCD-MD&" prefix and the Pastebin ID
-                const sessionId = `RCD-MD&${pastebinId}`;
-                
-                // Send the session ID to the user on WhatsApp
-                const ethix = await sock.sendMessage(sock.user.id, { text: sessionId });
-                
-                // Additional notification for the user
-                await sock.sendMessage(sock.user.id, { text: `> ❌ DO NOT SHARE THIS SESSION-ID WITH ANYBODY RCD MD` }, { quoted: ethix });
-                
-                await delay(1000 * 2);
-                process.exit(0);
-            } catch (error) {
-                console.error("Error uploading session to Pastebin:", error);
-                await sock.sendMessage(sock.user.id, { text: "Failed to generate session ID. Please try again later." });
-            }
-        }
+router.get('/', async (req, res) => {
+    const id = makeid();
+    let num = req.query.number;
+    
+    async function GHOST_MD_PAIR_CODE() {
+        const { state, saveCreds } = await useMultiFileAuthState('./temp/' + id);
         
-        if (connection === "close" && lastDisconnect && lastDisconnect.error && lastDisconnect.error.output.statusCode != 401) {
-            qr();
+        try {
+            let Pair_Code_By_Black_Castro = Black_Castro({
+                auth: {
+                    creds: state.creds,
+                    keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }).child({ level: "fatal" })),
+                },
+                printQRInTerminal: false,
+                logger: pino({ level: "fatal" }).child({ level: "fatal" }),
+                browser: ["Chrome (MacOs)", "Safari (Ubuntu)", "Chrome (Linux)"]
+            });
+            
+            if (!Pair_Code_By_Black_Castro.authState.creds.registered) {
+                await delay(1500);
+                num = num.replace(/[^0-9]/g, '');
+                const code = await Pair_Code_By_Black_Castro.requestPairingCode(num);
+                
+                if (!res.headersSent) {
+                    await res.send({ code });
+                }
+            }
+
+            Pair_Code_By_Black_Castro.ev.on('creds.update', saveCreds);
+            Pair_Code_By_Black_Castro.ev.on("connection.update", async (s) => {
+                const { connection, lastDisconnect } = s;
+                
+                if (connection === "open") {
+                    await delay(5000);
+                    let data = fs.readFileSync(__dirname + `/temp/${id}/creds.json`);
+                    await delay(800);
+                    // Add timestamp or unique identifier to ensure different session ID each time
+                    let b64data = "RCD-MD&" + Buffer.from(data).toString('base64').substring(0, 6) + id.substring(0, 2);
+                    let session = await Pair_Code_By_Black_Castro.sendMessage(Pair_Code_By_Black_Castro.user.id, { text: '' + b64data });
+
+                    let GHOST_MD_TEXT = `
+🪀Support/Contact Developer
+
+⎆Welcome to Classic Bot
+
+⎆Telegram Chat: https://t.me/+hhQQxFUABd81MDM0
+
+⎆WhatsApp Gc1: https://chat.whatsapp.com/EPSGKau0IVi7J5lyOJO7Jk
+
+⎆WhatsApp Number: +254104301695
+
+⎆GitHub: https://github.com/Samue-l1/,`;
+
+                    await Pair_Code_By_Black_Castro.sendMessage(Pair_Code_By_Black_Castro.user.id, { text: GHOST_MD_TEXT }, { quoted: session });
+
+                    await delay(100);
+                    await Pair_Code_By_Black_Castro.ws.close();
+                    return await removeFile('./temp/' + id);
+                } else if (connection === "close" && lastDisconnect && lastDisconnect.error && lastDisconnect.error.output.statusCode != 401) {
+                    await delay(10000);
+                    GHOST_MD_PAIR_CODE();
+                }
+            });
+        } catch (err) {
+            console.log("service Restated");
+            await removeFile('./temp/' + id);
+            if (!res.headersSent) {
+                await res.send({ code: "Service is Currently Unavailable" });
+            }
         }
-    });
-
-    sock.ev.on('creds.update', saveCreds);
-    sock.ev.on("messages.upsert", () => { });
-}
-
-qr();
-
-process.on('uncaughtException', function (err) {
-    let e = String(err);
-    if (e.includes("conflict")) return;
-    if (e.includes("not-authorized")) return;
-    if (e.includes("Socket connection timeout")) return;
-    if (e.includes("rate-overlimit")) return;
-    if (e.includes("Connection Closed")) return;
-    if (e.includes("Timed Out")) return;
-    if (e.includes("Value not found")) return;
-    console.log('Caught exception: ', err);
+    }
+    
+    return await GHOST_MD_PAIR_CODE();
 });
+
+module.exports = router;
